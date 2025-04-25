@@ -1,0 +1,71 @@
+import time
+import requests
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from webdriver_manager.chrome import ChromeDriverManager
+
+# 1. Chrome 옵션 설정
+options = Options()
+options.add_argument("--headless=new")
+options.add_argument("--disable-gpu")
+options.add_argument("--window-size=1920,1080")
+options.add_experimental_option("excludeSwitches", ["enable-logging"])
+
+# 2. 드라이버 실행
+driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+
+# 3. 결과 저장용 리스트
+valid_links = []
+page = 1
+
+print(f"\n[📄 GrayhatWarfare 버킷 목록 유효 링크만 저장 시작]\n")
+
+while True:
+    print(f"\n📄 페이지 {page} ------------------------------")
+    base_url = f"https://buckets.grayhatwarfare.com/buckets?type=aws&page={page}"
+    driver.get(base_url)
+    time.sleep(2)
+
+    try:
+        rows = driver.find_elements(By.CSS_SELECTOR, "table.table tbody tr")
+        if not rows:
+            print("✅ 마지막 페이지입니다.")
+            break
+
+        for row in rows:
+            cols = row.find_elements(By.TAG_NAME, "td")
+            if len(cols) >= 3:
+                name_tag = cols[1].find_element(By.TAG_NAME, "a")
+                count_tag = cols[2].find_element(By.TAG_NAME, "a")
+
+                name = name_tag.text.strip()
+                count = count_tag.text.strip()
+                url = name_tag.get_attribute("href")
+
+                # 4. 연결 시도
+                try:
+                    response = requests.head(url, timeout=5)
+                    if response.status_code == 200:
+                        print(f"✅ 연결 가능: {url}")
+                        valid_links.append(f"{name} | 파일 수: {count} | {url}")
+                    else:
+                        print(f"⚠️ 연결 실패 ({response.status_code}): {url}")
+                except Exception as e:
+                    print(f"❌ 오류 ({type(e).__name__}): {url}")
+
+    except Exception as e:
+        print(f"❌ 페이지 {page} 크롤링 오류: {e}")
+        break
+
+    page += 1
+
+driver.quit()
+
+# 5. 유효한 링크 저장
+with open("valid_buckets.txt", "w", encoding="utf-8") as f:
+    for line in valid_links:
+        f.write(line + "\n")
+
+print("\n✅ 유효한 링크를 valid_buckets.txt에 저장했습니다!")
